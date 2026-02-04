@@ -1,17 +1,7 @@
 "use client"
 
-import { useState } from "react"
-
-type Source = {
-  file_name: string
-  page: number
-}
-
-type AskResponse = {
-  answer: string
-  sources: Source[]
-}
-
+import { useState, useEffect } from "react"
+import { Source, AskResponse, FileItem} from "./types"
 
 export default function Home() {
   const [question, setQuestion] = useState("")
@@ -19,7 +9,30 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sources, setSources] = useState<Source[]>([])
+  const [files, setFiles] = useState<FileItem[]>([])
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([])
 
+
+  useEffect(() => {
+    async function fetchFiles() {
+      try {
+        const response = await fetch("http://localhost:8000/files")
+        const data: string[] = await response.json()
+        setFiles(data.map((name) => ({name})))
+      } catch (error) {
+        console.error("Files couldn't fetch.", error)
+      }
+    }
+    fetchFiles()
+  }, [])
+
+  function toggleFile(fileName: string) {
+    setSelectedFiles((prev) =>
+    prev.includes(fileName)
+      ? prev.filter((f) => f !== fileName)
+      : [...prev, fileName] 
+    )
+  }
 
   async function handleAsk() {
     setSources([])
@@ -37,6 +50,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           question: question,
+          files: selectedFiles.length > 0 ? selectedFiles : undefined,
         }),
       })
 
@@ -60,6 +74,26 @@ export default function Home() {
         Internal Document Q&A
       </h1>
 
+      {files.length > 0 && (
+        <div className="mb-4">
+          <h3 className="font-semibold mb-2">Files</h3>
+
+          <div className="space-y-1">
+            {files.map((file) => (
+              <label key={file.name} className="flex items-center gap-2">
+                <input
+                type="checkbox"
+                checked={selectedFiles.includes(file.name)}
+                onChange={() => toggleFile(file.name)}
+                />
+                <span>{file.name}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+
       <textarea
         className="w-full border p-2 mb-4"
         rows={4}
@@ -82,7 +116,7 @@ export default function Home() {
 
       {answer && (
         <div className="mt-6 p-4 border rounded">
-          <h2 className="font-semibold mb-2">Cevap</h2>
+          <h2 className="font-semibold mb-2">Response</h2>
           <p className="mb-4">{answer}</p>
 
           {sources.length > 0 && (
