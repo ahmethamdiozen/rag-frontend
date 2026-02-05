@@ -11,6 +11,8 @@ export default function Home() {
   const [sources, setSources] = useState<Source[]>([])
   const [files, setFiles] = useState<FileItem[]>([])
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
 
   useEffect(() => {
@@ -68,11 +70,68 @@ export default function Home() {
     }
   }
 
+  async function handleUpload(file: File) {
+    setUploading(true)
+    setUploadError(null)
+
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const res = await fetch("http://localhost:8000/upload", {
+        method: "POST",
+        body: formData
+      })
+
+      if(!res.ok) {
+        throw new Error("Upload failed")
+      }
+
+      const filesRes = await fetch("http://localhost:8000/files")
+      const data: string[] = await filesRes.json()
+      setFiles(data.map((name) => ({ name })))
+
+
+    } catch (err) {
+      setUploadError("Upload failed")
+    } finally {
+      setUploading(false)
+    }
+
+  }
+
   return (
     <main className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">
         Internal Document Q&A
       </h1>
+
+      <div className="mb-6">
+        <label className="block font-semibold mb-2">
+          Upload PDF
+        </label>
+
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                handleUpload(file)
+                e.target.value = ""
+              }
+            }}
+          />
+
+        {uploading && (
+          <p className="text-sm text-gray-600 mt-1">Uploading...</p>
+        )}
+
+        {uploadError && (
+          <p className="text-sm text-red-500 mt-1">{uploadError}</p>
+        )}
+      </div>
+
 
       {files.length > 0 && (
         <div className="mb-4">
