@@ -13,7 +13,7 @@ export default function Home() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-
+  const isBusy = loading || uploading
 
   useEffect(() => {
     async function fetchFiles() {
@@ -101,98 +101,184 @@ export default function Home() {
   }
 
   return (
-    <main className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">
-        Internal Document Q&A
-      </h1>
+    <main className="min-h-screen bg-gray-50 py-10">
+      <div className="max-w-3xl mx-auto px-6">
+        <h1 className="text-3xl font-semibold text-gray-900 mb-6">
+          Internal Document Q&A
+        </h1>
 
-      <div className="mb-6">
-        <label className="block font-semibold mb-2">
-          Upload PDF
-        </label>
+        {/* Upload */}
+        <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Upload PDF
+          </label>
 
-          <input
-            type="file"
-            accept="application/pdf"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) {
+          <div className="flex items-center gap-3">
+            {/* Hidden file input */}
+            <input
+              id="pdf-upload"
+              type="file"
+              accept="application/pdf"
+              disabled={loading}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+
+                if (file.type !== "application/pdf") {
+                  setUploadError("Only PDF files are allowed")
+                  e.target.value = ""
+                  return
+                }
+
+                if (file.size > 100 * 1024 * 1024) {
+                  setUploadError("File size must be less than 100MB")
+                  e.target.value = ""
+                  return
+                }
+
                 handleUpload(file)
                 e.target.value = ""
-              }
-            }}
+              }}
+            />
+
+            {/* Clickable button */}
+            <label
+              htmlFor="pdf-upload"
+              className={`inline-flex items-center px-4 py-2 rounded-md border text-sm font-medium cursor-pointer
+                ${
+                  loading
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-indigo-600 text-white hover:bg-indigo-700"
+                }`}
+            >
+              Choose PDF file
+            </label>
+
+            <span className="text-sm text-gray-500">
+              No file selected
+            </span>
+          </div>
+
+          {uploading && (
+            <p className="text-sm text-gray-500 mt-2">Uploading...</p>
+          )}
+          {uploadError && (
+            <p className="text-sm text-red-500 mt-2">{uploadError}</p>
+          )}
+        </div>
+
+
+        {/* Files */}
+        {files.length > 0 && (
+          <div className="bg-white border rounded-lg p-4 mb-6 shadow-sm">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">
+              Documents
+            </h3>
+
+            <div
+              className={`space-y-2 ${
+                isBusy ? "opacity-50 pointer-events-none" : ""
+              }`}
+            >
+              {files.map((file) => (
+                <label
+                  key={file.name}
+                  className="flex items-center gap-2 text-sm text-gray-800"
+                >
+                  <input
+                    disabled={isBusy}
+                    type="checkbox"
+                    checked={selectedFiles.includes(file.name)}
+                    onChange={() => toggleFile(file.name)}
+                  />
+                  {file.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Selected files badges */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {selectedFiles.map((file) => (
+              <span
+                key={file}
+                className="inline-flex items-center gap-1 px-3 py-1 text-sm bg-indigo-100 text-indigo-700 rounded-full"
+              >
+                {file}
+                <button
+                  onClick={() => toggleFile(file)}
+                  className="hover:text-indigo-900"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <button
+              onClick={() => setSelectedFiles([])}
+              className="text-sm text-indigo-600 underline ml-2"
+            >
+              Clear selection
+            </button>
+          </div>
+        )}
+
+        {selectedFiles.length === 0 && (
+          <div className="mb-4 text-sm text-gray-500 italic">
+            Searching across all documents
+          </div>
+        )}
+
+        {/* Ask */}
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+          <textarea
+            className="w-full border border-gray-300 rounded-md p-3 mb-4 text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            rows={4}
+            placeholder="Type your question..."
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
           />
 
-        {uploading && (
-          <p className="text-sm text-gray-600 mt-1">Uploading...</p>
-        )}
+          <button
+            onClick={handleAsk}
+            disabled={isBusy}
+            className="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-md disabled:opacity-50"
+          >
+            {loading ? "Asking..." : "Ask"}
+          </button>
 
-        {uploadError && (
-          <p className="text-sm text-red-500 mt-1">{uploadError}</p>
-        )}
-      </div>
+          {error && (
+            <p className="text-red-500 text-sm mt-4">{error}</p>
+          )}
 
+          {answer && (
+            <div className="mt-6 border-t pt-4">
+              <h2 className="text-sm font-medium text-gray-700 mb-2">
+                Response
+              </h2>
+              <p className="text-gray-800 mb-4">{answer}</p>
 
-      {files.length > 0 && (
-        <div className="mb-4">
-          <h3 className="font-semibold mb-2">Files</h3>
-
-          <div className="space-y-1">
-            {files.map((file) => (
-              <label key={file.name} className="flex items-center gap-2">
-                <input
-                type="checkbox"
-                checked={selectedFiles.includes(file.name)}
-                onChange={() => toggleFile(file.name)}
-                />
-                <span>{file.name}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-
-      <textarea
-        className="w-full border p-2 mb-4"
-        rows={4}
-        placeholder="Type question here..."
-        value={question}
-        onChange={(e) => setQuestion(e.target.value)}
-      />
-
-      <button
-        onClick={handleAsk}
-        disabled={loading}
-        className="px-4 py-2 bg-black text-white disabled:opacity-50"
-      >
-        {loading ? "Asking..." : "Sor"}
-      </button>
-
-      {error && (
-        <p className="text-red-500 mt-4">{error}</p>
-      )}
-
-      {answer && (
-        <div className="mt-6 p-4 border rounded">
-          <h2 className="font-semibold mb-2">Response</h2>
-          <p className="mb-4">{answer}</p>
-
-          {sources.length > 0 && (
-            <div>
-              <h3 className="font-semibold mb-2">Sources</h3>
-              <ul className="list-disc list-inside text-sm text-gray-700">
-                {sources.map((source, index) => (
-                  <li key={index}>
-                    {source.file_name} — Page {source.page}
-                  </li>
-                ))}
-              </ul>
+              {sources.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700 mb-1">
+                    Sources
+                  </h3>
+                  <ul className="list-disc list-inside text-sm text-gray-600">
+                    {sources.map((source, index) => (
+                      <li key={index}>
+                        {source.file_name} — Page {source.page}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
-
+      </div>
     </main>
   )
+
 }
