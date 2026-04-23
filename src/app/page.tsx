@@ -18,7 +18,7 @@ export default function Home() {
   useEffect(() => {
     async function fetchFiles() {
       try {
-        const response = await fetch("http://localhost:8000/files")
+        const response = await fetch("${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/files")
         const data: string[] = await response.json()
         setFiles(data.map((name) => ({name})))
       } catch (error) {
@@ -45,7 +45,7 @@ export default function Home() {
     setAnswer("")
 
     try {
-      const response = await fetch("http://localhost:8000/ask", {
+      const response = await fetch("${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/ask", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -78,7 +78,7 @@ export default function Home() {
     formData.append("file", file)
 
     try {
-      const res = await fetch("http://localhost:8000/upload", {
+      const res = await fetch("${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/upload", {
         method: "POST",
         body: formData
       })
@@ -87,7 +87,7 @@ export default function Home() {
         throw new Error("Upload failed")
       }
 
-      const filesRes = await fetch("http://localhost:8000/files")
+      const filesRes = await fetch("${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/files")
       const data: string[] = await filesRes.json()
       setFiles(data.map((name) => ({ name })))
 
@@ -131,8 +131,8 @@ export default function Home() {
                   return
                 }
 
-                if (file.size > 100 * 1024 * 1024) {
-                  setUploadError("File size must be less than 100MB")
+                if (file.size > 10 * 1024 * 1024) {
+                  setUploadError("File size must be less than 10MB")
                   e.target.value = ""
                   return
                 }
