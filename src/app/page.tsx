@@ -362,7 +362,7 @@ export default function Home() {
                 <div>
                   <p className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>No relevant content found</p>
                   <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                    The documents don't seem to contain information about this topic. Try rephrasing or upload a more relevant document.
+                    The documents don&apos;t seem to contain information about this topic. Try rephrasing or upload a more relevant document.
                   </p>
                 </div>
               </div>
