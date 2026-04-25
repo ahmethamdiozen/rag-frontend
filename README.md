@@ -1,36 +1,54 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RAG Document Q&A — Frontend
 
-## Getting Started
+Next.js frontend for the RAG Document Q&A system. Upload PDFs, filter by document, ask questions, and see answers with source citations.
 
-First, run the development server:
+**Live demo:** [rag.ahmethamdiozen.site](https://rag.ahmethamdiozen.site) · **Backend repo:** [rag-project](https://github.com/ahmethamdiozen/rag-project)
+
+---
+
+## Features
+
+- Drag-and-drop PDF upload (max 10 MB)
+- Multi-document filtering via checkboxes
+- Question input with ⌘+Enter shortcut
+- Answers with page-level source citations
+- Loading states and error handling
+
+---
+
+## Stack
+
+Next.js 16 · TypeScript · Tailwind CSS v4
+
+---
+
+## Local setup
+
+```bash
+npm install
+```
+
+Create `.env.local`:
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires the [backend](https://github.com/ahmethamdiozen/rag-project) running on port 8000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Docker
 
-## Learn More
+```bash
+docker build \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.rag.ahmethamdiozen.site \
+  -t rag-frontend .
 
-To learn more about Next.js, take a look at the following resources:
+docker run -p 3000:3000 rag-frontend
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> `NEXT_PUBLIC_API_URL` must be passed at **build time** — Next.js bakes it into the bundle.
