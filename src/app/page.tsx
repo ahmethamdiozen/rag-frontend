@@ -1,17 +1,13 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Source, AskResponse, FileItem } from "./types"
+import { Source, FileItem } from "./types"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"
 
-function Spinner() {
+function Spinner({ size = 4 }: { size?: number }) {
   return (
-    <svg
-      className="animate-spin h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
+    <svg className={`animate-spin h-${size} w-${size}`} viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
     </svg>
@@ -23,46 +19,44 @@ export default function Home() {
   const [answer, setAnswer] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [noResults, setNoResults] = useState(false)
   const [sources, setSources] = useState<Source[]>([])
   const [files, setFiles] = useState<FileItem[]>([])
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadPhase, setUploadPhase] = useState<"uploading" | "indexing" | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isBusy = loading || uploading
 
-  useEffect(() => {
-    fetchFiles()
-  }, [])
+  useEffect(() => { fetchFiles() }, [])
 
   async function fetchFiles() {
     try {
       const res = await fetch(`${API_URL}/files`)
       const data: string[] = await res.json()
       setFiles(data.map((name) => ({ name })))
-    } catch {
-      // silently ignore — backend may not be running locally
-    }
+    } catch { /* backend may not be running locally */ }
   }
 
   function toggleFile(fileName: string) {
     setSelectedFiles((prev) =>
-      prev.includes(fileName)
-        ? prev.filter((f) => f !== fileName)
-        : [...prev, fileName]
+      prev.includes(fileName) ? prev.filter((f) => f !== fileName) : [...prev, fileName]
     )
   }
 
   async function handleAsk() {
     if (!question.trim() || isBusy) return
     setSources([])
+    setNoResults(false)
     setLoading(true)
     setError(null)
     setAnswer("")
 
     try {
-      const res = await fetch(`${API_URL}/ask`, {
+      const res = await fetch(`${API_URL}/ask/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -70,10 +64,33 @@ export default function Home() {
           files: selectedFiles.length > 0 ? selectedFiles : undefined,
         }),
       })
-      if (!res.ok) throw new Error()
-      const data: AskResponse = await res.json()
-      setAnswer(data.answer)
-      setSources(data.sources)
+
+      if (!res.ok || !res.body) throw new Error()
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split("\n\n")
+        buffer = parts.pop() ?? ""
+
+        for (const part of parts) {
+          for (const line of part.split("\n")) {
+            if (!line.startsWith("data: ")) continue
+            try {
+              const event = JSON.parse(line.slice(6))
+              if (event.type === "token") setAnswer((prev) => prev + event.content)
+              else if (event.type === "sources") setSources(event.sources)
+              else if (event.type === "no_results") setNoResults(true)
+            } catch { /* malformed chunk */ }
+          }
+        }
+      }
     } catch {
       setError("Something went wrong. Please try again.")
     } finally {
@@ -81,7 +98,7 @@ export default function Home() {
     }
   }
 
-  async function handleUpload(file: File) {
+  function handleUpload(file: File) {
     if (file.type !== "application/pdf") {
       setUploadError("Only PDF files are allowed.")
       return
@@ -93,18 +110,41 @@ export default function Home() {
 
     setUploading(true)
     setUploadError(null)
+    setUploadProgress(0)
+    setUploadPhase("uploading")
+
     const formData = new FormData()
     formData.append("file", file)
 
-    try {
-      const res = await fetch(`${API_URL}/upload`, { method: "POST", body: formData })
-      if (!res.ok) throw new Error()
-      await fetchFiles()
-    } catch {
-      setUploadError("Upload failed. Please try again.")
-    } finally {
-      setUploading(false)
+    const xhr = new XMLHttpRequest()
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        setUploadProgress(Math.round((e.loaded / e.total) * 100))
+      }
     }
+
+    xhr.onload = async () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setUploadPhase("indexing")
+        await fetchFiles()
+      } else {
+        setUploadError("Upload failed. Please try again.")
+      }
+      setUploading(false)
+      setUploadPhase(null)
+      setUploadProgress(0)
+    }
+
+    xhr.onerror = () => {
+      setUploadError("Upload failed. Please try again.")
+      setUploading(false)
+      setUploadPhase(null)
+      setUploadProgress(0)
+    }
+
+    xhr.open("POST", `${API_URL}/upload`)
+    xhr.send(formData)
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -140,7 +180,6 @@ export default function Home() {
             Upload PDF
           </p>
 
-          {/* Drop zone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
@@ -165,9 +204,21 @@ export default function Home() {
               }}
             />
 
-            {uploading ? (
+            {uploadPhase === "uploading" ? (
+              <div className="w-full px-6 flex flex-col items-center gap-3">
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-200"
+                    style={{ width: `${uploadProgress}%`, background: "var(--accent)" }}
+                  />
+                </div>
+                <span className="text-sm" style={{ color: "var(--accent)" }}>
+                  Uploading… {uploadProgress}%
+                </span>
+              </div>
+            ) : uploadPhase === "indexing" ? (
               <span className="flex items-center gap-2 text-sm" style={{ color: "var(--accent)" }}>
-                <Spinner /> Uploading…
+                <Spinner /> Indexing document…
               </span>
             ) : (
               <>
@@ -184,9 +235,7 @@ export default function Home() {
             )}
           </div>
 
-          {uploadError && (
-            <p className="text-xs mt-3 text-red-500">{uploadError}</p>
-          )}
+          {uploadError && <p className="text-xs mt-3 text-red-500">{uploadError}</p>}
         </div>
 
         {/* File list */}
@@ -202,7 +251,7 @@ export default function Home() {
               {selectedFiles.length > 0 && (
                 <button
                   onClick={() => setSelectedFiles([])}
-                  className="text-xs transition-colors duration-150 hover:opacity-70"
+                  className="text-xs transition-opacity duration-150 hover:opacity-60"
                   style={{ color: "var(--accent)" }}
                 >
                   Clear selection
@@ -216,19 +265,14 @@ export default function Home() {
                 return (
                   <label
                     key={file.name}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors duration-150 group"
-                    style={{
-                      background: checked ? "rgba(99,102,241,0.06)" : "transparent",
-                    }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors duration-150"
+                    style={{ background: checked ? "rgba(99,102,241,0.06)" : "transparent" }}
                     onMouseEnter={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "rgba(99,102,241,0.03)" }}
                     onMouseLeave={e => { if (!checked) (e.currentTarget as HTMLElement).style.background = "transparent" }}
                   >
                     <div
                       className="flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center transition-all duration-150"
-                      style={{
-                        borderColor: checked ? "var(--accent)" : "var(--border)",
-                        background: checked ? "var(--accent)" : "transparent",
-                      }}
+                      style={{ borderColor: checked ? "var(--accent)" : "var(--border)", background: checked ? "var(--accent)" : "transparent" }}
                     >
                       {checked && (
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
@@ -236,16 +280,8 @@ export default function Home() {
                         </svg>
                       )}
                     </div>
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleFile(file.name)}
-                      disabled={isBusy}
-                      className="hidden"
-                    />
-                    <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>
-                      {file.name}
-                    </span>
+                    <input type="checkbox" checked={checked} onChange={() => toggleFile(file.name)} disabled={isBusy} className="hidden" />
+                    <span className="text-sm truncate" style={{ color: "var(--text-primary)" }}>{file.name}</span>
                   </label>
                 )
               })}
@@ -265,16 +301,11 @@ export default function Home() {
             {selectedFiles.map((file) => (
               <span
                 key={file}
-                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs rounded-full transition-all duration-150"
+                className="inline-flex items-center gap-1.5 px-3 py-1 text-xs rounded-full"
                 style={{ background: "rgba(99,102,241,0.1)", color: "var(--accent)" }}
               >
                 {file}
-                <button
-                  onClick={() => toggleFile(file)}
-                  className="transition-opacity duration-150 hover:opacity-60 leading-none"
-                >
-                  ×
-                </button>
+                <button onClick={() => toggleFile(file)} className="hover:opacity-60 transition-opacity leading-none">×</button>
               </span>
             ))}
           </div>
@@ -297,11 +328,7 @@ export default function Home() {
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAsk() }}
             disabled={isBusy}
             className="w-full rounded-xl border px-4 py-3 text-sm mb-4 resize-none outline-none transition-all duration-200 disabled:opacity-50"
-            style={{
-              borderColor: "var(--border)",
-              color: "var(--text-primary)",
-              background: "transparent",
-            }}
+            style={{ borderColor: "var(--border)", color: "var(--text-primary)", background: "transparent" }}
             onFocus={e => e.currentTarget.style.borderColor = "var(--border-focus)"}
             onBlur={e => e.currentTarget.style.borderColor = "var(--border)"}
           />
@@ -311,32 +338,48 @@ export default function Home() {
               onClick={handleAsk}
               disabled={isBusy || !question.trim()}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white transition-all duration-200 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ background: loading ? "var(--accent)" : "var(--accent)" }}
+              style={{ background: "var(--accent)" }}
               onMouseEnter={e => { if (!isBusy) (e.currentTarget as HTMLElement).style.background = "var(--accent-hover)" }}
               onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "var(--accent)"}
             >
               {loading ? <><Spinner /> Thinking…</> : "Ask"}
             </button>
-            <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-              ⌘ + Enter
-            </span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>⌘ + Enter</span>
           </div>
 
-          {error && (
-            <p className="text-xs mt-4 text-red-500">{error}</p>
+          {error && <p className="text-xs mt-4 text-red-500">{error}</p>}
+
+          {/* No results */}
+          {noResults && !loading && (
+            <div
+              className="mt-6 pt-6 border-t rounded-xl p-4"
+              style={{ borderColor: "var(--border)", background: "rgba(99,102,241,0.04)" }}
+            >
+              <div className="flex items-start gap-3">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--text-muted)", flexShrink: 0, marginTop: 1 }}>
+                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>No relevant content found</p>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    The documents don't seem to contain information about this topic. Try rephrasing or upload a more relevant document.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Answer */}
-          {answer && (
-            <div
-              className="mt-6 pt-6 border-t"
-              style={{ borderColor: "var(--border)" }}
-            >
+          {(answer || loading) && !noResults && (
+            <div className="mt-6 pt-6 border-t" style={{ borderColor: "var(--border)" }}>
               <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-secondary)" }}>
                 Answer
               </p>
               <p className="text-sm leading-relaxed mb-5" style={{ color: "var(--text-primary)" }}>
                 {answer}
+                {loading && (
+                  <span className="inline-block w-0.5 h-4 ml-0.5 align-middle animate-pulse" style={{ background: "var(--accent)" }} />
+                )}
               </p>
 
               {sources.length > 0 && (
@@ -344,11 +387,11 @@ export default function Home() {
                   <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-secondary)" }}>
                     Sources
                   </p>
-                  <ul className="space-y-1">
+                  <div className="flex flex-wrap gap-2">
                     {sources.map((source, i) => (
-                      <li
+                      <span
                         key={i}
-                        className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg mr-2"
+                        className="inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg"
                         style={{ background: "rgba(99,102,241,0.06)", color: "var(--accent)" }}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -356,9 +399,9 @@ export default function Home() {
                           <polyline points="14 2 14 8 20 8" />
                         </svg>
                         {source.file_name} · p. {source.page}
-                      </li>
+                      </span>
                     ))}
-                  </ul>
+                  </div>
                 </>
               )}
             </div>
