@@ -4,7 +4,7 @@
 
 RAG Doküman Soru-Cevap sisteminin Next.js frontend'i. PDF yükle, dosyaya göre filtrele, soru sor — cevaplar kaynak atıflarıyla birlikte token token akar.
 
-**Canlı demo:** [rag.ahmethamdiozen.site](https://rag.ahmethamdiozen.site) · **Backend repo:** [rag-project](https://github.com/ahmethamdiozen/rag-project)
+**Canlı demo:** [rag.ahmethamdiozen.com](https://rag.ahmethamdiozen.com) · **Backend repo:** [rag-project](https://github.com/ahmethamdiozen/rag-project)
 
 ---
 
