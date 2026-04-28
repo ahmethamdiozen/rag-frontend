@@ -4,7 +4,7 @@
 
 Next.js frontend for the RAG Document Q&A system. Upload PDFs, filter by document, ask questions, and see answers with source citations.
 
-**Live demo:** [rag.ahmethamdiozen.site](https://rag.ahmethamdiozen.site) · **Backend repo:** [rag-project](https://github.com/ahmethamdiozen/rag-project)
+**Live demo:** [rag.ahmethamdiozen.com](https://rag.ahmethamdiozen.com) · **Backend repo:** [rag-project](https://github.com/ahmethamdiozen/rag-project)
 
 ---
 
